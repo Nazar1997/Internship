@@ -1,11 +1,10 @@
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <vector>
 #include <set> 
 #include <iterator>
 
-using std::cin;
-using std::cout;
 using std::vector;
 using std::pair;
 
@@ -18,13 +17,14 @@ private:
         Node *right;//если больше порога
         int main_class = -1; // класс не определен
     };
+    size_t depth = 0;
     Node* Root;
+    size_t training_set_quantity = 0;; //количество объектов учебной выборки
     vector<vector<double>> X;
     vector<size_t> Y;
     vector<size_t> classes;
     vector<TAtribute> attributes;
-    Node *Tree_Construction(vector<size_t>& available_data)
-    {
+    Node *Tree_Construction(vector<size_t>& available_data) {
         vector<size_t> frequensly(classes.size(), 0);
         for (size_t i = 0; i != available_data.size(); ++i) {
             auto it = std::lower_bound(classes.begin(), classes.end(), Y[available_data[i]]);
@@ -33,7 +33,7 @@ private:
         bool is_node_a_leaf = false;
         size_t most_frequensly_class = 0;
         for (size_t i = 0; i != classes.size(); ++i) {
-            if (frequensly[i] / available_data.size() > 0.9) {
+            if (frequensly[i] * 1.0 / available_data.size() > 0.95) {
                 most_frequensly_class = classes[i];
                 is_node_a_leaf = true;
                 break;
@@ -92,31 +92,46 @@ private:
             return the_answer;
         }
     }
+    void Tree_Destruction(Node *the_node) {
+        if (the_node->main_class != -1) {
+            return;
+        }
+        else {
+            Tree_Destruction(the_node->right);
+            delete the_node->right;
+            Tree_Destruction(the_node->left);
+            delete the_node->left;
+        }
+    }
 public:
+
     Decision_Tree() {
 
     }
     ~Decision_Tree() {
-
+        Tree_Destruction(Root);
+        delete Root;
     }
     void Pruning() {
 
+
     }
     void training() {
+        std::ifstream fin("data.txt");
         size_t attribute_quantity;
-        cin >> attribute_quantity;
+        fin >> attribute_quantity;
         size_t object_quantity;
-        cin >> object_quantity;
+        fin >> object_quantity;
         for (size_t i = 0; i != object_quantity; ++i) {
             vector<double> object;
             for (size_t q = 0; q != attribute_quantity; ++q) {
                 double data;
-                cin >> data;
+                fin >> data;
                 object.push_back(data);
             }
             X.push_back(object);
             size_t class_of_object;
-            cin >> class_of_object;
+            fin >> class_of_object;
             Y.push_back(class_of_object);
         }
         for (size_t i = 0; i != X[0].size(); ++i) {//проходим все атрибуты
@@ -129,10 +144,6 @@ public:
                 attributes.push_back(std::make_pair(i, (*it + *(++it)) / 2));//раставляем пороги
             }
         }
-        vector<size_t> available_data(X.size());//укажем всю выборку как доступную
-        for (size_t i = 0; i != X.size(); ++i) {
-            available_data[i] = i;
-        }
         for (size_t i = 0; i != Y.size(); ++i) {
             auto it = find(classes.begin(), classes.end(), Y[i]);
             if (it == classes.end()) {
@@ -140,14 +151,28 @@ public:
             }
         }
         sort(classes.begin(), classes.end());
-        Root = Tree_Construction(available_data);
-    }
-    size_t classificator() {
-        vector<double> object(X[0].size());
-        for (size_t i = 0; i != X[0].size(); ++i) {
-            cin >> object[i];
+        double qualiti = 0; // процент верных ответов построенного дерева
+        while (qualiti < 0.8 && training_set_quantity < object_quantity / 2) {
+            training_set_quantity += object_quantity / 20;
+            vector<size_t> available_data(training_set_quantity);//укажем доступную выборку
+            for (size_t i = 0; i != training_set_quantity; ++i) {
+                available_data[i] = i;
+            }
+            Root = Tree_Construction(available_data);
+            size_t right = 0, mistakes = 0;
+            for (size_t i = training_set_quantity; i != X.size(); ++i) {
+                if (classificator(X[i]) == Y[i]) {
+                    ++right;
+                } else {
+                    ++mistakes;
+                }
+            }
+            qualiti = right * 1.0 / (right + mistakes);
         }
+    }
+    size_t classificator(vector<double>& object) {
         Node* the_Node = Root;
+        size_t dep = 0;
         while (the_Node->main_class == -1) {
             if (object[the_Node->the_atribute.first] > the_Node->the_atribute.second) {
                 the_Node = the_Node->right;
@@ -155,14 +180,31 @@ public:
             else {
                 the_Node = the_Node->left;
             }
+            ++dep;
+            if (dep > depth) {
+                depth = dep;
+            }
         }
         return the_Node->main_class;
+    }
+    double purest() {
+        size_t a=0, b=0;
+        for (size_t i = 0; i != X.size(); ++i) {
+            if (classificator(X[i]) == Y[i]) {
+                ++a;
+            }
+            else {
+                ++b;
+            }
+        }
+        return a * 1.0 / (a + b);
     }
 };
 
 int main() {
     Decision_Tree the_Tree;
     the_Tree.training();
-    cout << the_Tree.classificator() << std::endl;
+    double i = the_Tree.purest();
+    std::cout << i << std::endl;
     return 0;
 }
